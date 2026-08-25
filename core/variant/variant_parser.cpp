@@ -1830,6 +1830,12 @@ Error VariantParser::parse_tag_assign_eof(Stream *p_stream, int &r_line, String 
 			}
 		} else if (c == '\n') {
 			r_line++;
+			// A key never spans lines. Anything accumulated before the newline was
+			// trailing content on the previous line -- a stray comma after a value,
+			// say -- and carrying it over silently prefixes it onto the next key:
+			// `k1 = "a",` followed by `k2 = "b"` parses as the keys `k1` and `,k2`.
+			// Drop it so one malformed line cannot corrupt the entry after it.
+			what = String();
 		}
 	}
 }

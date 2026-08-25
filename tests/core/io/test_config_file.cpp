@@ -118,6 +118,41 @@ antialiasing = false ; Duplicate key.
 			"The configuration file shouldn't parse successfully.");
 }
 
+TEST_CASE("[ConfigFile] Trailing content does not leak into the next key") {
+	// A key never spans lines, so leftover text at the end of one line must not
+	// be carried into the key on the next. Before this was handled, the stray
+	// commas below produced the keys `k0` and `,k1` instead of `k0` and `k1`.
+	// https://github.com/godotengine/godot/issues/119459
+	ConfigFile config_file;
+	const Error error = config_file.parse(R"(
+[LANGUAGE]
+k0 = "Portugues",
+k1 = "English",
+)");
+
+	CHECK(error == OK);
+	CHECK(config_file.has_section_key("LANGUAGE", "k0"));
+	CHECK_MESSAGE(config_file.has_section_key("LANGUAGE", "k1"),
+			"The trailing comma must not be prepended to the following key.");
+	CHECK_FALSE(config_file.has_section_key("LANGUAGE", ",k1"));
+	CHECK(String(config_file.get_value("LANGUAGE", "k0")) == "Portugues");
+	CHECK(String(config_file.get_value("LANGUAGE", "k1")) == "English");
+}
+
+TEST_CASE("[ConfigFile] Content without an assignment does not affect later keys") {
+	// Same rule, with the junk on a line of its own rather than trailing a value.
+	ConfigFile config_file;
+	const Error error = config_file.parse(R"(
+[section]
+stray
+key = "value"
+)");
+
+	CHECK(error == OK);
+	CHECK(config_file.has_section_key("section", "key"));
+	CHECK_FALSE(config_file.has_section_key("section", "straykey"));
+	CHECK(String(config_file.get_value("section", "key")) == "value");
+}
 TEST_CASE("[ConfigFile] Saving file") {
 	ConfigFile config_file;
 	config_file.set_value("player", "name", "Unnamed Player");
