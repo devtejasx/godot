@@ -325,6 +325,34 @@ static String get_full_version_string() {
 }
 
 #if defined(TOOLS_ENABLED) && defined(MODULE_GDSCRIPT_ENABLED)
+// Rendering drivers able to service a given rendering method, limited to the
+// backends this build was compiled with. Empty for an unknown method.
+static Vector<String> get_rendering_drivers_for_method(const String &p_rendering_method) {
+	Vector<String> available_drivers;
+	if (p_rendering_method == "forward_plus" || p_rendering_method == "mobile") {
+#ifdef VULKAN_ENABLED
+		available_drivers.push_back("vulkan");
+#endif
+#ifdef D3D12_ENABLED
+		available_drivers.push_back("d3d12");
+#endif
+#ifdef METAL_ENABLED
+		available_drivers.push_back("metal");
+#endif
+	}
+#ifdef GLES3_ENABLED
+	if (p_rendering_method == "gl_compatibility") {
+		available_drivers.push_back("opengl3");
+		available_drivers.push_back("opengl3_angle");
+		available_drivers.push_back("opengl3_es");
+	}
+#endif
+	if (p_rendering_method == "dummy") {
+		available_drivers.push_back("dummy");
+	}
+	return available_drivers;
+}
+
 static Vector<String> get_files_with_extension(const String &p_root, const String &p_extension) {
 	Vector<String> paths;
 
@@ -2463,6 +2491,13 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		renderer_hints = "dummy";
 	}
 
+	// Registered before the driver is validated below, so that the project's
+	// own rendering method can be consulted while resolving --rendering-driver.
+	default_renderer = renderer_hints.get_slicec(',', 0);
+	GLOBAL_DEF_RST_BASIC(PropertyInfo(Variant::STRING, "rendering/renderer/rendering_method", PROPERTY_HINT_ENUM, renderer_hints), default_renderer);
+	GLOBAL_DEF_RST_BASIC("rendering/renderer/rendering_method.mobile", default_renderer_mobile);
+	GLOBAL_DEF_RST_BASIC(PropertyInfo(Variant::STRING, "rendering/renderer/rendering_method.web", PROPERTY_HINT_ENUM, "gl_compatibility"), "gl_compatibility"); // This is a bit of a hack until we have WebGPU support.
+
 	if (!rendering_driver.is_empty()) {
 		// As the rendering drivers available may depend on the display driver and renderer
 		// selected, we can't do an exhaustive check here, but we can look through all
@@ -2510,9 +2545,19 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			goto error;
 		}
 
-		// Set a default renderer if none selected. Try to choose one that matches the driver.
+		// Set a renderer if none was selected on the command line. Prefer the
+		// project's own rendering method when the requested driver can service
+		// it: passing only --rendering-driver used to leave rendering_method
+		// non-empty here, so the ProjectSettings lookup further down never ran
+		// and a "mobile" project was silently switched to "forward_plus".
+		// Only when the project's method cannot run on the requested driver do
+		// we fall back to a default derived from the driver itself.
 		if (rendering_method.is_empty()) {
-			if (rendering_driver == "dummy") {
+			const String project_rendering_method = GLOBAL_GET("rendering/renderer/rendering_method");
+			if (get_rendering_drivers_for_method(project_rendering_method).has(rendering_driver)) {
+				rendering_method = project_rendering_method;
+				rendering_method_source = OS::RenderingSource::RENDERING_SOURCE_PROJECT_SETTING;
+			} else if (rendering_driver == "dummy") {
 				rendering_method = "dummy";
 			} else if (rendering_driver == "opengl3" || rendering_driver == "opengl3_angle" || rendering_driver == "opengl3_es") {
 				rendering_method = "gl_compatibility";
@@ -2523,28 +2568,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 		// Now validate whether the selected driver matches with the renderer.
 		bool valid_combination = false;
-		Vector<String> available_drivers;
-		if (rendering_method == "forward_plus" || rendering_method == "mobile") {
-#ifdef VULKAN_ENABLED
-			available_drivers.push_back("vulkan");
-#endif
-#ifdef D3D12_ENABLED
-			available_drivers.push_back("d3d12");
-#endif
-#ifdef METAL_ENABLED
-			available_drivers.push_back("metal");
-#endif
-		}
-#ifdef GLES3_ENABLED
-		if (rendering_method == "gl_compatibility") {
-			available_drivers.push_back("opengl3");
-			available_drivers.push_back("opengl3_angle");
-			available_drivers.push_back("opengl3_es");
-		}
-#endif
-		if (rendering_method == "dummy") {
-			available_drivers.push_back("dummy");
-		}
+		Vector<String> available_drivers = get_rendering_drivers_for_method(rendering_method);
 		if (available_drivers.is_empty()) {
 			OS::get_singleton()->print("Unknown renderer name '%s', aborting.\n", rendering_method.utf8().get_data());
 			goto error;
@@ -2569,11 +2593,6 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			goto error;
 		}
 	}
-
-	default_renderer = renderer_hints.get_slicec(',', 0);
-	GLOBAL_DEF_RST_BASIC(PropertyInfo(Variant::STRING, "rendering/renderer/rendering_method", PROPERTY_HINT_ENUM, renderer_hints), default_renderer);
-	GLOBAL_DEF_RST_BASIC("rendering/renderer/rendering_method.mobile", default_renderer_mobile);
-	GLOBAL_DEF_RST_BASIC(PropertyInfo(Variant::STRING, "rendering/renderer/rendering_method.web", PROPERTY_HINT_ENUM, "gl_compatibility"), "gl_compatibility"); // This is a bit of a hack until we have WebGPU support.
 
 	// Default to ProjectSettings default if nothing set on the command line.
 	if (rendering_method.is_empty()) {
