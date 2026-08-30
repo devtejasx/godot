@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <class name="Skin" inherits="Resource" api_type="core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
-		A list of inverse bind poses and corresponding bones.
+		The set of bones a mesh is skinned to, and the bind pose of each.
 	</brief_description>
 	<description>
-		[Skin] contains a list of bind pose matrices and a list of either bone names if bones are named, or bone indices if bones are not named. The bind pose matrix, also called offset matrix or inverse bind matrix, is a [Transform3D] offset that is multiplied with a bone's transform to get from vertex space to bone space.
+		A [Skin] holds an ordered list of [i]binds[/i]. Each bind ties one of a [MeshInstance3D]'s skin weight indices to a bone of the [Skeleton3D] that drives it, and stores that bone's [i]bind pose[/i] - the inverse of the bone's global transform at the moment the mesh was authored.
+		A [MeshInstance3D] applies a bind by multiplying the bound bone's global pose by that bind's pose, so a skeleton posed exactly as it was authored leaves the mesh undeformed.
+		A bind identifies its bone in one of two ways, and they are mutually exclusive:
+		- [b]By name[/b] ([method add_named_bind], [method set_bind_name]). The bone is looked up in the [Skeleton3D] by name every time the skeleton changes, so the skin survives a bone being inserted, removed or reordered. This is what the glTF and Collada importers produce.
+		- [b]By index[/b] ([method add_bind], [method set_bind_bone]). Cheaper, but tied to the exact bone order of one skeleton.
+		A bind with a name keeps whatever [method get_bind_bone] happens to hold - [code]-1[/code] for a bind created by [method add_named_bind] - because the index is never consulted. Use [method get_bind_name] to read a named bind, and [method Skeleton3D.find_bone] on the skeleton driving the mesh if you need the index it currently resolves to. The inspector hides the bone index of a named bind for the same reason.
+		Skins are usually created by the importer, and a [MeshInstance3D] falls back to one generated from its [member MeshInstance3D.skeleton] when [member MeshInstance3D.skin] is not set, so building one by hand is only needed for meshes assembled at runtime.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -14,7 +20,7 @@
 			<param index="0" name="bone" type="int" />
 			<param index="1" name="pose" type="Transform3D" />
 			<description>
-				Adds a bind pose matrix of [param pose] and associated bone index [param bone] to the bind pose list and increases the bind count by 1.
+				Appends a bind that refers to the bone at index [param bone] of the skeleton, with [param pose] as its bind pose. The new bind's name is empty, so it stays index-based; see [method add_named_bind] for the name-based form.
 			</description>
 		</method>
 		<method name="add_named_bind">
@@ -22,40 +28,41 @@
 			<param index="0" name="name" type="String" />
 			<param index="1" name="pose" type="Transform3D" />
 			<description>
-				Like [method add_bind] but adds a bone [param name] instead of a bone index.
+				Appends a bind that refers to the bone called [param name], with [param pose] as its bind pose. The bone is resolved by name against the skeleton, so the bind still works if bones are reordered. The new bind's bone index stays [code]-1[/code] and is not used; [method get_bind_bone] will return that.
 			</description>
 		</method>
 		<method name="clear_binds">
 			<return type="void" />
 			<description>
-				Clears the bind pose list.
+				Removes every bind, leaving [method get_bind_count] at [code]0[/code].
 			</description>
 		</method>
 		<method name="get_bind_bone" qualifiers="const">
 			<return type="int" />
 			<param index="0" name="bind_index" type="int" />
 			<description>
-				Returns the bone index associated with bind pose [param bind_index].
+				Returns the bone index stored on bind [param bind_index], or [code]-1[/code] if the bind has none.
+				[b]Note:[/b] This is the index as stored, not a lookup. A bind that identifies its bone by name never has one set - [method add_named_bind] leaves it at [code]-1[/code] - and this returns [code]-1[/code] however many bones the skeleton has. Check [method get_bind_name] first, and resolve it with [method Skeleton3D.find_bone] on the skeleton that drives the mesh.
 			</description>
 		</method>
 		<method name="get_bind_count" qualifiers="const">
 			<return type="int" />
 			<description>
-				Returns the length of the bind pose list.
+				Returns the number of binds.
 			</description>
 		</method>
 		<method name="get_bind_name" qualifiers="const">
 			<return type="StringName" />
 			<param index="0" name="bind_index" type="int" />
 			<description>
-				Returns the bone name associated with bind pose [param bind_index].
+				Returns the name of the bone that bind [param bind_index] refers to, or an empty [StringName] if the bind refers to its bone by index instead.
 			</description>
 		</method>
 		<method name="get_bind_pose" qualifiers="const">
 			<return type="Transform3D" />
 			<param index="0" name="bind_index" type="int" />
 			<description>
-				Returns the bind pose matrix at [param bind_index].
+				Returns the bind pose of bind [param bind_index] - the transform the bound bone's global pose is multiplied by when the mesh is skinned.
 			</description>
 		</method>
 		<method name="set_bind_bone">
@@ -63,14 +70,14 @@
 			<param index="0" name="bind_index" type="int" />
 			<param index="1" name="bone" type="int" />
 			<description>
-				Sets the bone index of bind pose [param bind_index] to the given index [param bone].
+				Sets the bone index that bind [param bind_index] refers to. Has no effect while the bind also has a name, since the name wins; clear it with [method set_bind_name] and an empty [StringName] first.
 			</description>
 		</method>
 		<method name="set_bind_count">
 			<return type="void" />
 			<param index="0" name="bind_count" type="int" />
 			<description>
-				Resizes the bind pose list to a length of [param bind_count].
+				Resizes the list of binds. Binds added by growing it have no name, a bone index of [code]-1[/code] and an identity bind pose, so each one has to be filled in with [method set_bind_bone] or [method set_bind_name] and [method set_bind_pose].
 			</description>
 		</method>
 		<method name="set_bind_name">
@@ -78,7 +85,7 @@
 			<param index="0" name="bind_index" type="int" />
 			<param index="1" name="name" type="StringName" />
 			<description>
-				Sets the name of the bone in bind pose [param bind_index] to [param name].
+				Sets the name of the bone that bind [param bind_index] refers to, making the bind name-based. Pass an empty [StringName] to go back to using its bone index.
 			</description>
 		</method>
 		<method name="set_bind_pose">
@@ -86,7 +93,7 @@
 			<param index="0" name="bind_index" type="int" />
 			<param index="1" name="pose" type="Transform3D" />
 			<description>
-				Sets the bind pose [param bind_index] with the given offset matrix [param pose].
+				Sets the bind pose of bind [param bind_index]. See [method get_bind_pose].
 			</description>
 		</method>
 	</methods>
