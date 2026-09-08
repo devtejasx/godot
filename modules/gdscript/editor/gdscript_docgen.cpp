@@ -398,7 +398,12 @@ void GDScriptDocGen::_generate_docs(GDScript *p_script, const GDP::ClassNode *p_
 				const_doc.name = const_name;
 				const_doc.value = _docvalue_from_variant(m_const->initializer->reduced_value);
 				const_doc.is_value_valid = true;
-				_doctype_from_datatype(m_const->type_constraint, const_doc.type, const_doc.enumeration);
+				// ConstantDoc::enumeration means "this constant is a member of that enum":
+				// it is what groups constants under Enumerations. A plain `const` whose value
+				// happens to be enum-typed is not a member of the enum, so only its type is
+				// taken and the enumeration is left empty, keeping it under Constants.
+				String const_enum;
+				_doctype_from_datatype(m_const->type_constraint, const_doc.type, const_enum);
 				const_doc.description = m_const->doc_data.description;
 				const_doc.is_deprecated = m_const->doc_data.is_deprecated;
 				const_doc.deprecated_message = m_const->doc_data.deprecated_message;
