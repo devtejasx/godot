@@ -3907,18 +3907,21 @@ Error RenderingDeviceDriverVulkan::swap_chain_resize(CommandQueueID p_cmd_queue,
 			AUTO_FPS_AUTO_PIPELINE,
 		};
 
+		// Both setters take "true means enable", so auto swap interval is the
+		// "auto FPS" half of each mode name and auto pipeline mode is the
+		// opposite of "pipeline forced on".
 		switch (swappy_mode) {
 			case PIPELINE_FORCED_ON:
-				SwappyVk_setAutoSwapInterval(true);
-				SwappyVk_setAutoPipelineMode(true);
+				SwappyVk_setAutoSwapInterval(false);
+				SwappyVk_setAutoPipelineMode(false);
 				break;
 			case AUTO_FPS_PIPELINE_FORCED_ON:
 				SwappyVk_setAutoSwapInterval(true);
 				SwappyVk_setAutoPipelineMode(false);
 				break;
 			case AUTO_FPS_AUTO_PIPELINE:
-				SwappyVk_setAutoSwapInterval(false);
-				SwappyVk_setAutoPipelineMode(false);
+				SwappyVk_setAutoSwapInterval(true);
+				SwappyVk_setAutoPipelineMode(true);
 				break;
 		}
 	}
