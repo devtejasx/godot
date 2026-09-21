@@ -144,7 +144,7 @@ struct BreakpointLocation {
 struct Capabilities {
 	bool supportsConfigurationDoneRequest = true;
 	bool supportsEvaluateForHovers = true;
-	bool supportsSetVariable = true;
+	bool supportsSetVariable = false; // No req_setVariable handler yet.
 	String supportedChecksumAlgorithms[2] = { "MD5", "SHA256" };
 	bool supportsRestartRequest = true;
 	bool supportsValueFormattingOptions = true;
