@@ -3067,6 +3067,9 @@ Error Image::compress(CompressMode p_mode, CompressSource p_source, CompressProf
 }
 
 Error Image::compress_from_channels(CompressMode p_mode, UsedChannels p_channels, CompressProfile p_profile) {
+	ERR_FAIL_INDEX_V_MSG(p_mode, COMPRESS_MAX, ERR_INVALID_PARAMETER, "Invalid compress mode.");
+	ERR_FAIL_INDEX_V_MSG(p_channels, USED_CHANNELS_RGBA + 1, ERR_INVALID_PARAMETER, "Invalid used channels.");
+	ERR_FAIL_INDEX_V_MSG(p_profile, COMPRESS_PROFILE_MAX, ERR_INVALID_PARAMETER, "Invalid compress profile.");
 	return _compress_from_channels(p_mode, p_channels, p_profile, BPTC_DETECT);
 }
 

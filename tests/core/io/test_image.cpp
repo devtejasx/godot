@@ -500,4 +500,21 @@ TEST_CASE("[Image] Convert image") {
 	CHECK_MESSAGE(image2->get_data() == image_data, "Image conversion to invalid type (Image::FORMAT_MAX + 1) should not alter image.");
 }
 
+TEST_CASE("[Image] Compressing from channels rejects invalid enum values") {
+	Ref<Image> image = memnew(Image(30, 23, true, Image::FORMAT_L8));
+	const PackedByteArray image_data = image->get_data();
+
+	ERR_PRINT_OFF;
+	CHECK(image->compress_from_channels((Image::CompressMode)-1, Image::USED_CHANNELS_L) == ERR_INVALID_PARAMETER);
+	CHECK(image->compress_from_channels(Image::COMPRESS_MAX, Image::USED_CHANNELS_L) == ERR_INVALID_PARAMETER);
+	CHECK(image->compress_from_channels(Image::COMPRESS_BPTC, (Image::UsedChannels)-79) == ERR_INVALID_PARAMETER);
+	CHECK(image->compress_from_channels(Image::COMPRESS_BPTC, (Image::UsedChannels)(Image::USED_CHANNELS_RGBA + 1)) == ERR_INVALID_PARAMETER);
+	CHECK(image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_L, (Image::CompressProfile)-25) == ERR_INVALID_PARAMETER);
+	CHECK(image->compress_from_channels(Image::COMPRESS_BPTC, Image::USED_CHANNELS_L, Image::COMPRESS_PROFILE_MAX) == ERR_INVALID_PARAMETER);
+	ERR_PRINT_ON;
+
+	CHECK_MESSAGE(image->get_format() == Image::FORMAT_L8, "Rejected compression should not change the format.");
+	CHECK_MESSAGE(image->get_data() == image_data, "Rejected compression should not alter the image.");
+}
+
 } // namespace TestImage
