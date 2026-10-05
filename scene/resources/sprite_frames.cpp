@@ -146,6 +146,8 @@ void SpriteFrames::set_animation_speed(const StringName &p_anim, double p_fps) {
 	HashMap<StringName, Anim>::Iterator E = animations.find(p_anim);
 	ERR_FAIL_COND_MSG(!E, "Animation '" + String(p_anim) + "' doesn't exist.");
 	E->value.speed = p_fps;
+
+	emit_changed();
 }
 
 double SpriteFrames::get_animation_speed(const StringName &p_anim) const {
@@ -168,6 +170,8 @@ void SpriteFrames::set_animation_loop_mode(const StringName &p_anim, LoopMode p_
 	HashMap<StringName, Anim>::Iterator E = animations.find(p_anim);
 	ERR_FAIL_COND_MSG(!E, "Animation '" + String(p_anim) + "' doesn't exist.");
 	E->value.loop = p_loop_mode;
+
+	emit_changed();
 }
 
 SpriteFrames::LoopMode SpriteFrames::get_animation_loop_mode(const StringName &p_anim) const {

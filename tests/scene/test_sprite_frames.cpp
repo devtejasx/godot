@@ -32,7 +32,9 @@
 
 TEST_FORCE_LINK(test_sprite_frames)
 
+#include "core/core_string_names.h"
 #include "scene/resources/sprite_frames.h"
+#include "tests/signal_watcher.h"
 
 namespace TestSpriteFrames {
 
@@ -201,6 +203,30 @@ TEST_CASE("[SpriteFrames] Animation Loop Mode getter and setter") {
 	frames.get_animation_loop_mode("This does not exist");
 	frames.set_animation_loop_mode("This does not exist", SpriteFrames::LOOP_NONE);
 	ERR_PRINT_ON;
+}
+
+TEST_CASE("[SpriteFrames] Changing animation speed or loop mode emits changed") {
+	SpriteFrames frames;
+	frames.add_animation(test_animation_name);
+
+	SIGNAL_WATCH(&frames, CoreStringName(changed));
+	Array empty_args = { {} };
+
+	frames.set_animation_speed(test_animation_name, 12.0);
+	SIGNAL_CHECK("changed", empty_args);
+
+	frames.set_animation_loop_mode(test_animation_name, SpriteFrames::LOOP_PINGPONG);
+	SIGNAL_CHECK("changed", empty_args);
+
+	// A rejected change leaves the resource untouched and does not emit.
+	ERR_PRINT_OFF;
+	frames.set_animation_speed(test_animation_name, -1.0);
+	frames.set_animation_speed("This does not exist", 1.0);
+	frames.set_animation_loop_mode("This does not exist", SpriteFrames::LOOP_NONE);
+	ERR_PRINT_ON;
+	SIGNAL_CHECK_FALSE("changed");
+
+	SIGNAL_UNWATCH(&frames, CoreStringName(changed));
 }
 
 // TODO
