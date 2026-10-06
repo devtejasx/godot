@@ -73,6 +73,39 @@ TEST_CASE("[SceneTree][Tree]") {
 		memdelete(tree);
 	}
 
+	SUBCASE("[Tree] Insert by index after reordering children.") {
+		Tree *tree = memnew(Tree);
+		TreeItem *root = tree->create_item();
+
+		TreeItem *a = root->create_child();
+		TreeItem *b = root->create_child();
+		TreeItem *c = root->create_child();
+		CHECK_EQ(root->get_child_count(), 3);
+
+		// Moving into the middle invalidates the child cache.
+		c->move_before(b);
+
+		TreeItem *first = root->create_child(0);
+		TreeItem *inserted = root->create_child(2);
+		CHECK_EQ(root->get_child_count(), 5);
+		CHECK_EQ(root->get_child(0), first);
+		CHECK_EQ(root->get_child(1), a);
+		CHECK_EQ(root->get_child(2), inserted);
+		CHECK_EQ(root->get_child(3), c);
+		CHECK_EQ(root->get_child(4), b);
+
+		// Same with move_after.
+		first->move_after(a);
+		TreeItem *new_first = root->create_child(0);
+		CHECK_EQ(root->get_child_count(), 6);
+		CHECK_EQ(root->get_child(0), new_first);
+		CHECK_EQ(root->get_child(1), a);
+		CHECK_EQ(root->get_child(2), first);
+		CHECK_EQ(root->get_child(5), b);
+
+		memdelete(tree);
+	}
+
 	SUBCASE("[Tree] Clear items.") {
 		Tree *tree = memnew(Tree);
 		TreeItem *root = tree->create_item();
