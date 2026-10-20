@@ -46,7 +46,7 @@ public:
 	Projection cam_projection;
 	Vector2 taa_jitter;
 	float taa_frame_count = 0.0f;
-	uint32_t camera_visible_layers;
+	uint32_t camera_visible_layers = 0xFFFFFFFF; // Shadow passes do not set it; match the Compatibility renderer.
 	bool cam_orthogonal = false;
 	bool flip_y = false;
 
