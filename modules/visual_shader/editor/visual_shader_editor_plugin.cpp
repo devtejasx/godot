@@ -2636,6 +2636,22 @@ bool VisualShaderEditor::_is_add_option_available_in_context(const AddOption &p_
 	}
 
 	if (_is_editing_group()) {
+		// A group is compiled as a function, so only the built-ins that are global
+		// in this shader mode can be read inside it.
+		if (p_option.type == VisualShaderNodeInput::get_class_static() && !p_option.ops.is_empty() && p_option.ops[0].is_string()) {
+			Ref<VisualShaderNodeInput> input;
+			input.instantiate();
+			input->set_shader_mode(shader_mode);
+			input->set_shader_type(VisualShader::TYPE_MAX);
+
+			const String input_name = p_option.ops[0];
+			for (int i = 0; i < input->get_input_index_count(); i++) {
+				if (input->get_input_index_name(i) == input_name) {
+					return true;
+				}
+			}
+			return false;
+		}
 		return true;
 	}
 
