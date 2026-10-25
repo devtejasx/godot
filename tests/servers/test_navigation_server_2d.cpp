@@ -751,6 +751,76 @@ TEST_SUITE("[Navigation2D]") {
 		navigation_server->physics_process(0.0); // Give server some cycles to commit.
 	}
 
+	TEST_CASE("[NavigationServer2D] Region filters should keep links between allowed regions usable") {
+		NavigationServer2D *navigation_server = NavigationServer2D::get_singleton();
+
+		RID map = navigation_server->map_create();
+		navigation_server->map_set_active(map, true);
+		navigation_server->map_set_use_async_iterations(map, false);
+
+		// Three separate squares: A and B joined by a link, C unrelated.
+		RID regions[3];
+		const Vector2 offsets[3] = { Vector2(0, 0), Vector2(20, 0), Vector2(0, 20) };
+		for (int i = 0; i < 3; i++) {
+			Ref<NavigationPolygon> navigation_polygon;
+			navigation_polygon.instantiate();
+			const Vector2 o = offsets[i];
+			navigation_polygon->set_vertices(PackedVector2Array({ o, o + Vector2(10, 0), o + Vector2(10, 10), o + Vector2(0, 10) }));
+			navigation_polygon->add_polygon(PackedInt32Array({ 0, 1, 2, 3 }));
+			regions[i] = navigation_server->region_create();
+			navigation_server->region_set_use_async_iterations(regions[i], false);
+			navigation_server->region_set_map(regions[i], map);
+			navigation_server->region_set_navigation_polygon(regions[i], navigation_polygon);
+		}
+		RID link = navigation_server->link_create();
+		navigation_server->link_set_map(link, map);
+		navigation_server->link_set_start_position(link, Vector2(9, 5));
+		navigation_server->link_set_end_position(link, Vector2(21, 5));
+		navigation_server->link_set_bidirectional(link, true);
+		navigation_server->physics_process(0.0); // Give server some cycles to commit.
+
+		Ref<NavigationPathQueryParameters2D> query_parameters;
+		query_parameters.instantiate();
+		query_parameters->set_map(map);
+		query_parameters->set_start_position(Vector2(1, 5));
+		query_parameters->set_target_position(Vector2(29, 5));
+		Ref<NavigationPathQueryResult2D> query_result;
+		query_result.instantiate();
+
+		SUBCASE("Excluding an unrelated region should keep the link usable") {
+			query_parameters->set_excluded_regions(TypedArray<RID>({ regions[2] }));
+			navigation_server->query_path(query_parameters, query_result);
+			CHECK(query_result->get_path_rids().has(link));
+			CHECK_EQ(query_result->get_path()[query_result->get_path().size() - 1], Vector2(29, 5));
+		}
+
+		SUBCASE("Including both linked regions should keep the link usable") {
+			query_parameters->set_included_regions(TypedArray<RID>({ regions[0], regions[1] }));
+			navigation_server->query_path(query_parameters, query_result);
+			CHECK(query_result->get_path_rids().has(link));
+			CHECK_EQ(query_result->get_path()[query_result->get_path().size() - 1], Vector2(29, 5));
+		}
+
+		SUBCASE("Excluding a linked region should make the link unusable") {
+			query_parameters->set_excluded_regions(TypedArray<RID>({ regions[1] }));
+			navigation_server->query_path(query_parameters, query_result);
+			CHECK_FALSE(query_result->get_path_rids().has(link));
+		}
+
+		SUBCASE("Including only one linked region should make the link unusable") {
+			query_parameters->set_included_regions(TypedArray<RID>({ regions[0] }));
+			navigation_server->query_path(query_parameters, query_result);
+			CHECK_FALSE(query_result->get_path_rids().has(link));
+		}
+
+		navigation_server->free_rid(link);
+		for (const RID &region : regions) {
+			navigation_server->free_rid(region);
+		}
+		navigation_server->free_rid(map);
+		navigation_server->physics_process(0.0); // Give server some cycles to commit.
+	}
+
 	TEST_CASE("[NavigationServer2D] Server should simplify path properly") {
 		real_t simplify_epsilon = 0.2;
 		Vector<Vector2> source_path;

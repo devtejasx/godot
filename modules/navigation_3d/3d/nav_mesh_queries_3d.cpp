@@ -241,7 +241,7 @@ void NavMeshQueries3D::_query_task_find_start_end_positions(NavMeshPathQueryTask
 	const LocalVector<Ref<NavRegionIteration3D>> &regions = p_map_iteration.region_iterations;
 
 	for (const Ref<NavRegionIteration3D> &region : regions) {
-		if (!_query_task_is_connection_owner_usable(p_query_task, region.ptr())) {
+		if (!_query_task_is_connection_owner_usable(p_query_task, p_map_iteration, region.ptr())) {
 			continue;
 		}
 
@@ -276,10 +276,10 @@ void NavMeshQueries3D::_query_task_find_start_end_positions(NavMeshPathQueryTask
 	}
 }
 
-void NavMeshQueries3D::_query_task_search_polygon_connections(NavMeshPathQueryTask3D &p_query_task, const Connection &p_connection, uint32_t p_least_cost_id, const NavigationPoly &p_least_cost_poly, real_t p_poly_enter_cost, const Vector3 &p_end_point) {
+void NavMeshQueries3D::_query_task_search_polygon_connections(NavMeshPathQueryTask3D &p_query_task, const NavMapIteration3D &p_map_iteration, const Connection &p_connection, uint32_t p_least_cost_id, const NavigationPoly &p_least_cost_poly, real_t p_poly_enter_cost, const Vector3 &p_end_point) {
 	const NavBaseIteration3D *connection_owner = p_connection.polygon->owner;
 	ERR_FAIL_NULL(connection_owner);
-	const bool owner_is_usable = _query_task_is_connection_owner_usable(p_query_task, connection_owner);
+	const bool owner_is_usable = _query_task_is_connection_owner_usable(p_query_task, p_map_iteration, connection_owner);
 	if (!owner_is_usable) {
 		return;
 	}
@@ -377,13 +377,13 @@ void NavMeshQueries3D::_query_task_build_path_corridor(NavMeshPathQueryTask3D &p
 			const LocalVector<Connection> &polygon_connections = navbase_polygons_to_connections[navbase_local_polygon_id];
 
 			for (const Connection &connection : polygon_connections) {
-				_query_task_search_polygon_connections(p_query_task, connection, least_cost_id, least_cost_poly, poly_enter_cost, end_point);
+				_query_task_search_polygon_connections(p_query_task, p_map_iteration, connection, least_cost_id, least_cost_poly, poly_enter_cost, end_point);
 			}
 		}
 
 		// Search region external navmesh polygon connections, aka connections to other regions created by outline edge merge or links.
 		for (const Connection &connection : navbases_polygons_external_connections[least_cost_navbase][navbase_local_polygon_id]) {
-			_query_task_search_polygon_connections(p_query_task, connection, least_cost_id, least_cost_poly, poly_enter_cost, end_point);
+			_query_task_search_polygon_connections(p_query_task, p_map_iteration, connection, least_cost_id, least_cost_poly, poly_enter_cost, end_point);
 		}
 
 		if (has_path_search_max && !path_search_max_reached) {
@@ -1278,7 +1278,7 @@ void NavMeshQueries3D::_query_task_clip_path(NavMeshPathQueryTask3D &p_query_tas
 	}
 }
 
-bool NavMeshQueries3D::_query_task_is_connection_owner_usable(const NavMeshPathQueryTask3D &p_query_task, const NavBaseIteration3D *p_owner) {
+bool NavMeshQueries3D::_query_task_is_connection_owner_usable(const NavMeshPathQueryTask3D &p_query_task, const NavMapIteration3D &p_map_iteration, const NavBaseIteration3D *p_owner) {
 	ERR_FAIL_NULL_V(p_owner, false);
 
 	bool owner_usable = true;
@@ -1306,20 +1306,24 @@ bool NavMeshQueries3D::_query_task_is_connection_owner_usable(const NavMeshPathQ
 				}
 			} break;
 			case NavigationEnums3D::PathSegmentType::PATH_SEGMENT_TYPE_LINK: {
-				const LocalVector<Polygon> &link_polygons = p_owner->get_navmesh_polygons();
-				if (link_polygons.size() != 2) {
+				// A link has no navmesh polygons of its own. The map builder stores its
+				// exits as external connections to the region polygons it leads to.
+				const LocalVector<LocalVector<Connection>> *link_connections = p_map_iteration.navbases_polygons_external_connections.getptr(p_owner);
+				if (link_connections == nullptr || link_connections->is_empty()) {
 					// Not usable. Whatever this is, it is not a valid connected link.
 					owner_usable = false;
-				} else {
-					const RID link_start_region = link_polygons[0].owner->get_self();
-					const RID link_end_region = link_polygons[1].owner->get_self();
-					if (p_query_task.exclude_regions && (p_query_task.excluded_regions.has(link_start_region) || p_query_task.excluded_regions.has(link_end_region))) {
-						// Not usable. Exclude region filter is active and at least one region of the link is excluded.
-						owner_usable = false;
-					}
-					if (p_query_task.include_regions && (!p_query_task.included_regions.has(link_start_region) || !p_query_task.excluded_regions.has(link_end_region))) {
-						// Not usable. Include region filter is active and not both regions of the links are included.
-						owner_usable = false;
+					break;
+				}
+				for (const LocalVector<Connection> &polygon_connections : *link_connections) {
+					for (const Connection &connection : polygon_connections) {
+						const RID link_region = connection.polygon->owner->get_self();
+						if (p_query_task.exclude_regions && p_query_task.excluded_regions.has(link_region)) {
+							// Not usable. Exclude region filter is active and a region of the link is excluded.
+							owner_usable = false;
+						} else if (p_query_task.include_regions && !p_query_task.included_regions.has(link_region)) {
+							// Not usable. Include region filter is active and a region of the link is not included.
+							owner_usable = false;
+						}
 					}
 				}
 			} break;
